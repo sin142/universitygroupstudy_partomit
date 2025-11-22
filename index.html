@@ -19,7 +19,6 @@
             --gauge-bg: #696969;      /* ゲージ背景 (容器の背景色) */
             --gauge-border: #000000;  /* ゲージの縁取り (黒) */
             --gauge1-fill: #34c759;   /* ゲージ1（緑） */
-            /* --gauge2-... 系の変数は削除 */
             --payment-color: #ff3b30; /* 支払金額（赤） */
         }
 
@@ -131,9 +130,6 @@
             width: 100%; /* 初期値 */
             background-color: var(--gauge1-fill);
         }
-
-        /* ゲージ2関連のCSS（.gauge-layer, #gauge2-viewportなど）は全て削除しました
-        */
         
         /* 支払い金額（赤色） */
         #display-payment-amount {
@@ -148,8 +144,7 @@
     <!-- 2. HTML（すべての画面をここに格納） -->
 
     <!-- 
-        画面A（初期設定）は廃止・削除しました。
-        起動時は画面Bから始まります。
+        画面A（初期設定）は完全削除しました。
     -->
 
     <!-- 画面B： 待機（ホーム） -->
@@ -157,7 +152,7 @@
         <div class="container">
             <h2>ホーム</h2>
             
-            <!-- 総資産表示行を削除 -->
+            <!-- (修正) 総資産表示行を削除 -->
             
             <div class="balance-display">
                 <span class="balance-label">アプリ残高</span>
@@ -225,7 +220,7 @@
                 </div>
             </div>
             
-            <!-- 総資産（ゲージ2）関連の表示エリアを全て削除 -->
+            <!-- (修正) 総資産（ゲージ2）関連の表示エリアをHTMLから完全削除 -->
             
             <button id="btn-return-to-home" class="secondary">ホームへ戻る</button>
         </div>
@@ -287,6 +282,8 @@
             experimentState.appBalance = 0;
             showScreen('screenB');
 
+            // (修正) 画面A関連のイベントリスナーを削除しました
+
             /* 画面B */
             document.getElementById('btn-goto-charge').addEventListener('click', () => { showScreen('screenC'); });
             document.getElementById('btn-goto-payment').addEventListener('click', () => { showScreen('screenD'); });
@@ -298,7 +295,7 @@
                 if (isNaN(chargeAmount) || chargeAmount <= 0) {
                     console.warn("有効なチャージ金額を入力してください。"); return;
                 }
-                // (★ 修正) 上限を固定値 100,000円に変更
+                // 上限を固定値 100,000円に変更
                 const MAX_CHARGE = 100000;
                 if (chargeAmount > MAX_CHARGE) {
                     console.warn("チャージ上限(10万円)を超えています"); 
