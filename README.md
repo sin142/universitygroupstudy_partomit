@@ -1,0 +1,2 @@
+# universitygroupstudy_partomit
+グループ研究に利用するアプリの総資産ゲージに関する情報をオミットしたバージョン
