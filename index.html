@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <!-- スマートフォンでの表示と、拡大縮小の制御 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>スマホ決済アプリ（対照条件）</title>
+
+    <!-- 1. CSS（すべてのスタイルをここに格納） -->
+    <style>
+        /* --- 全体・基本スタイル --- */
+        :root {
+            --primary-color: #007aff; /* メインカラー */
+            --bg-color: #f4f4f8;      /* 背景色 */
+            --fg-color: #ffffff;      /* カード背景色 */
+            --text-color: #1c1c1e;    /* テキスト色 */
+            --text-subtle-color: #6a6a6e; /* サブテキスト色 */
+            --border-color: #e0e0e0;   /* 境界線 */
+            --gauge-bg: #696969;      /* ゲージ背景 (容器の背景色) */
+            --gauge-border: #000000;  /* ゲージの縁取り (黒) */
+            --gauge1-fill: #34c759;   /* ゲージ1（緑） */
+            /* --gauge2-... 系の変数は削除 */
+            --payment-color: #ff3b30; /* 支払金額（赤） */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            overscroll-behavior: none;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* --- 画面制御 --- */
+        .screen {
+            display: none; /* 基本はすべて非表示 */
+            box-sizing: border-box;
+            padding: 24px;
+            width: 100%;
+            height: 100svh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            overflow-y: auto;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+        }
+        .screen.active {
+            display: flex; 
+        }
+
+        /* --- UIコンポーネント --- */
+        .container {
+            background-color: var(--fg-color);
+            border-radius: 16px;
+            padding: 20px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+
+        h1, h2, h3 { margin-top: 0; text-align: center; }
+        h2 { font-size: 1.5rem; margin-bottom: 24px; }
+        p, .label { font-size: 0.9rem; color: var(--text-subtle-color); margin-top: 0; margin-bottom: 8px; }
+        
+        input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            font-size: 1.1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-sizing: border-box;
+            margin-bottom: 16px;
+        }
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--fg-color);
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        button:active { opacity: 0.7; }
+        button.secondary { background-color: #e5e5ea; color: var(--text-color); margin-top: 12px; }
+
+        .balance-display { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color); }
+        .balance-label { font-size: 1.1rem; font-weight: 500; }
+        .balance-amount { font-size: 1.5rem; font-weight: 600; color: var(--primary-color); }
+        .balance-amount .currency { font-size: 1rem; font-weight: 400; color: var(--text-subtle-color); margin-left: 4px; }
+
+        /* --- 画面D: QRリーダー --- */
+        #qr-reader { position: relative; width: 100%; max-width: 300px; margin: 0 auto 20px auto; border-radius: 16px; overflow: hidden; border: 2px solid var(--border-color); }
+        #qr-video { width: 100%; height: auto; display: block; }
+        #qr-canvas { display: none; }
+        #payment-amount-display { text-align: center; font-size: 1.2rem; font-weight: 600; margin-bottom: 20px; }
+
+        /* --- 画面E: 決済完了・ゲージ --- */
+        .payment-result-group { width: 100%; margin-bottom: 24px; }
+        .result-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+        .result-label { font-size: 1rem; font-weight: 500; color: var(--text-subtle-color); }
+        .result-amount { font-size: 1.2rem; font-weight: 600; }
+
+        /* ゲージの基本スタイル */
+        .gauge-container {
+            width: 100%;
+            height: 24px;
+            border: 2px solid var(--gauge-border); /* 容器の縁取り (黒) */
+            box-sizing: border-box; /* 縁取りを高さに含める */
+            overflow: hidden;
+            position: relative;
+            background-color: var(--gauge-bg); /* 容器背景 (灰) */
+        }
+
+        /* ゲージ1: 局所ゲージ */
+        #gauge1-fill {
+            height: 100%;
+            width: 100%; /* 初期値 */
+            background-color: var(--gauge1-fill);
+        }
+
+        /* ゲージ2関連のCSS（.gauge-layer, #gauge2-viewportなど）は全て削除しました
+        */
+        
+        /* 支払い金額（赤色） */
+        #display-payment-amount {
+            color: var(--payment-color);
+            font-weight: 700;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- 2. HTML（すべての画面をここに格納） -->
+
+    <!-- 
+        画面A（初期設定）は廃止・削除しました。
+        起動時は画面Bから始まります。
+    -->
+
+    <!-- 画面B： 待機（ホーム） -->
+    <div id="screenB" class="screen active">
+        <div class="container">
+            <h2>ホーム</h2>
+            
+            <!-- 総資産表示行を削除 -->
+            
+            <div class="balance-display">
+                <span class="balance-label">アプリ残高</span>
+                <span class="balance-amount" style="color: var(--gauge1-fill);"><span id="display-app-balance">0</span><span class="currency">円</span></span>
+            </div>
+        </div>
+        <div class="container">
+            <button id="btn-goto-payment">支払い（QRスキャン）</button>
+            <button id="btn-goto-charge" class="secondary">チャージ</button>
+        </div>
+    </div>
+
+    <!-- 画面C： チャージ -->
+    <div id="screenC" class="screen">
+        <div class="container">
+            <h2>チャージ</h2>
+            <label for="input-charge-amount" class="label">チャージ金額</label>
+            <input type="number" id="input-charge-amount" placeholder="チャージする金額">
+            
+            <button id="btn-execute-charge">チャージ実行</button>
+            <button id="btn-back-to-home-from-C" class="secondary">戻る</button>
+        </div>
+    </div>
+
+    <!-- 画面D： 支払い -->
+    <div id="screenD" class="screen">
+        <div class="container">
+            <h2>支払い</h2>
+            <p>QRコードをスキャンしてください</p>
+            <div id="qr-reader">
+                <video id="qr-video" playsinline></video>
+                <canvas id="qr-canvas"></canvas>
+            </div>
+            
+            <label for="input-payment-amount" class="label">支払金額</label>
+            <input type="number" id="input-payment-amount" placeholder="金額（QRスキャンで自動入力）">
+            
+            <button id="btn-execute-payment">支払いを実行</button>
+            <button id="btn-back-to-home-from-D" class="secondary">戻る</button>
+        </div>
+    </div>
+
+    <!-- 画面E： 決済完了 -->
+    <div id="screenE" class="screen">
+        <div class="container">
+            <h2>支払い完了</h2>
+            
+            <!-- 支払金額 -->
+            <div class="payment-result-group">
+                <div class="result-header">
+                    <span class="result-label">支払金額</span>
+                    <span class="result-amount" id="display-payment-amount">- 0円</span>
+                </div>
+            </div>
+
+            <!-- アプリ内残高（ゲージ1のみ） -->
+            <div class="payment-result-group">
+                <div class="result-header">
+                    <span class="result-label">アプリ内残高</span>
+                    <span class="result-amount" id="display-app-balance-after">0円</span>
+                </div>
+                <!-- ゲージ1（局所・停止用） -->
+                <div id="gauge1" class="gauge-container">
+                    <div id="gauge1-fill"></div>
+                </div>
+            </div>
+            
+            <!-- 総資産（ゲージ2）関連の表示エリアを全て削除 -->
+            
+            <button id="btn-return-to-home" class="secondary">ホームへ戻る</button>
+        </div>
+    </div>
+
+
+    <!-- 3. JavaScript ライブラリ -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
+
+    <!-- 4. JavaScript（すべてのロジックをここに格納） -->
+    <script>
+        
+        /* --- 2. データ管理 --- */
+        // 総資産(totalAssets)を削除
+        let experimentState = {
+          appBalance: 0,
+          paymentAmount: 0,
+          appBalanceBeforePayment: 0
+        };
+        
+        let videoStream = null;
+        let animationFrameId = null;
+
+        /* --- 3. 画面管理 --- */
+        const allScreens = document.querySelectorAll('.screen');
+        
+        function showScreen(screenId) {
+            if (videoStream) { stopQRScanner(); }
+
+            allScreens.forEach(screen => {
+                screen.classList.remove('active');
+            });
+            
+            const targetScreen = document.getElementById(screenId);
+            if (targetScreen) {
+                targetScreen.classList.add('active');
+                
+                if (screenId === 'screenB') { updateHomeScreen(); }
+                else if (screenId === 'screenD') {
+                    document.getElementById('input-payment-amount').value = '';
+                    startQRScanner();
+                } else if (screenId === 'screenE') {
+                    runPaymentAnimation();
+                }
+            }
+        }
+        
+        function formatCurrency(value) {
+            const roundedValue = Math.round(value);
+            return new Intl.NumberFormat('ja-JP').format(roundedValue);
+        }
+
+        /* --- 4. 各画面の詳細仕様 --- */
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- 初期設定 ---
+            // 画面Aは廃止したため、起動直後に初期化してホーム(B)へ
+            experimentState.appBalance = 0;
+            showScreen('screenB');
+
+            /* 画面B */
+            document.getElementById('btn-goto-charge').addEventListener('click', () => { showScreen('screenC'); });
+            document.getElementById('btn-goto-payment').addEventListener('click', () => { showScreen('screenD'); });
+            
+            /* 画面C */
+            document.getElementById('btn-execute-charge').addEventListener('click', () => {
+                const chargeAmount = parseFloat(document.getElementById('input-charge-amount').value);
+                
+                if (isNaN(chargeAmount) || chargeAmount <= 0) {
+                    console.warn("有効なチャージ金額を入力してください。"); return;
+                }
+                // (★ 修正) 上限を固定値 100,000円に変更
+                const MAX_CHARGE = 100000;
+                if (chargeAmount > MAX_CHARGE) {
+                    console.warn("チャージ上限(10万円)を超えています"); 
+                    // alert(`一度にチャージできる金額は ${formatCurrency(MAX_CHARGE)}円 までです。`);
+                    return;
+                }
+                
+                experimentState.appBalance += chargeAmount;
+                document.getElementById('input-charge-amount').value = '';
+                showScreen('screenB');
+            });
+            
+            document.getElementById('btn-back-to-home-from-C').addEventListener('click', () => {
+                document.getElementById('input-charge-amount').value = '';
+                showScreen('screenB');
+            });
+
+            /* 画面D */
+            document.getElementById('btn-execute-payment').addEventListener('click', () => {
+                const paymentAmount = parseFloat(document.getElementById('input-payment-amount').value);
+                
+                if (isNaN(paymentAmount) || paymentAmount <= 0) {
+                    console.warn("有効な支払金額を入力してください。"); return;
+                }
+                if (paymentAmount > experimentState.appBalance) {
+                    console.warn("残高不足です"); return;
+                }
+                
+                // 総資産関連の処理を削除
+                experimentState.paymentAmount = paymentAmount;
+                experimentState.appBalanceBeforePayment = experimentState.appBalance;
+                
+                experimentState.appBalance -= paymentAmount;
+                
+                showScreen('screenE');
+            });
+
+            document.getElementById('btn-back-to-home-from-D').addEventListener('click', () => { showScreen('screenB'); });
+            
+            /* 画面E */
+            document.getElementById('btn-return-to-home').addEventListener('click', () => { showScreen('screenB'); });
+        });
+
+        /* 画面B更新 */
+        function updateHomeScreen() {
+            // 総資産表示の更新を削除
+            document.getElementById('display-app-balance').textContent = formatCurrency(experimentState.appBalance);
+        }
+
+        /* QRスキャナー */
+        const video = document.getElementById('qr-video');
+        const canvasElement = document.getElementById('qr-canvas');
+        const canvas = canvasElement.getContext('2d', { willReadFrequently: true });
+
+        async function startQRScanner() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" }
+                });
+                videoStream = stream;
+                video.srcObject = stream;
+                video.setAttribute("playsinline", true);
+                await video.play();
+                animationFrameId = requestAnimationFrame(tick);
+            } catch (err) {
+                console.error("QR Error:", err);
+            }
+        }
+        
+        function stopQRScanner() {
+            if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; }
+            if (videoStream) { videoStream.getTracks().forEach(track => track.stop()); videoStream = null; video.srcObject = null; }
+        }
+        
+        function tick() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvasElement.height = video.videoHeight;
+                canvasElement.width = video.videoWidth;
+                canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+                const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+                if (code) {
+                    const paymentAmount = parseFloat(code.data);
+                    if (!isNaN(paymentAmount) && paymentAmount > 0) {
+                        document.getElementById('input-payment-amount').value = paymentAmount;
+                        stopQRScanner();
+                        document.getElementById('input-payment-amount').focus();
+                        return;
+                    }
+                }
+            }
+            animationFrameId = requestAnimationFrame(tick);
+        }
+
+        /* --- 4.5. 画面E: 決済完了アニメーション (対照条件用: ゲージ1のみ) --- */
+        
+        const gauge1Fill = document.getElementById('gauge1-fill');
+
+        function runPaymentAnimation() {
+            // データ読み込み (総資産なし)
+            const {
+                paymentAmount,
+                appBalance, 
+                appBalanceBeforePayment
+            } = experimentState;
+
+            const preciseAppBalance = appBalanceBeforePayment - paymentAmount;
+
+            // 数字情報を即座に表示
+            document.getElementById('display-payment-amount').textContent = `- ${formatCurrency(paymentAmount)}円`;
+            document.getElementById('display-app-balance-after').textContent = `${formatCurrency(preciseAppBalance)}円`;
+            // 総資産表示更新を削除
+
+            // 計算
+            const gauge1FillPercent = appBalanceBeforePayment > 0 ? (preciseAppBalance / appBalanceBeforePayment) * 100 : 0;
+            
+            // State 0
+            gauge1Fill.style.transition = 'none';
+            gauge1Fill.style.width = '100%';
+            
+            // Animation (ゲージ1のみ減少)
+            setTimeout(() => {
+                gauge1Fill.style.transition = 'width 0.8s ease-out';
+                
+                setTimeout(() => {
+                    gauge1Fill.style.width = `${gauge1FillPercent}%`;
+                }, 0); 
+
+            }, 50); 
+        }
+    </script>
+</body>
+</html>
